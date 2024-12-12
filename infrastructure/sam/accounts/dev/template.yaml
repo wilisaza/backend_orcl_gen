@@ -1,0 +1,293 @@
+# This is the SAM template that represents the architecture of your serverless application
+# https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-template-basics.html
+
+# The AWSTemplateFormatVersion identifies the capabilities of the template
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/format-version-structure.html
+AWSTemplateFormatVersion: 2010-09-09
+Description: Deploy a complete ECS + Fargate solution.
+
+# Transform section specifies one or more macros that AWS CloudFormation uses to process your template
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/transform-section-structure.html
+Transform:
+- AWS::Serverless-2016-10-31
+
+Parameters:
+  project:
+    Type: String
+    AllowedPattern: ^(?:[a-z0-9]+(?:[-][a-z0-9]+)*)+$ 
+  environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - qa
+      - prod
+  serviceName:
+    Type: String
+    MinLength: "3"
+    MaxLength: "11"
+  serviceRepository:
+    Type: String
+    Description: "E.g: owner/repo_name"
+  repositoryBranch:
+    Type: String
+    Default: main
+  imageVersion:
+    Type: String
+    Default: latest
+  publicService:
+    Type: String
+    Description: Do you want your service facing internet?
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  containerSize:
+    Type: String
+    Description: CPU Size | RAM Size
+    Default: 256|0.5GB
+    AllowedValues:
+      - 256|0.5GB
+      - 256|1GB
+      - 256|2GB
+      - 512|1GB
+      - 512|2GB
+      - 512|3GB
+      - 512|4GB
+      - 1024|2GB
+      - 1024|3GB
+      - 1024|4GB
+      - 1024|5GB
+      - 1024|6GB
+      - 1024|7GB
+      - 1024|8GB
+      - 2048|4GB
+      - 2048|5GB
+      - 2048|6GB
+      - 2048|7GB
+      - 2048|8GB
+      - 2048|9GB
+      - 2048|10GB
+      - 2048|11GB
+      - 2048|12GB
+      - 2048|13GB
+      - 2048|14GB
+      - 2048|15GB
+      - 2048|16GB
+      - 4096|8GB
+      - 4096|9GB
+      - 4096|10GB
+      - 4096|11GB
+      - 4096|12GB
+      - 4096|13GB
+      - 4096|14GB
+      - 4096|15GB
+      - 4096|16GB
+      - 4096|17GB
+      - 4096|18GB
+      - 4096|19GB
+      - 4096|20GB
+      - 4096|21GB
+      - 4096|22GB
+      - 4096|23GB
+      - 4096|24GB
+      - 4096|25GB
+      - 4096|26GB
+      - 4096|27GB
+      - 4096|28GB
+      - 4096|29GB
+      - 4096|30GB
+  containerPort:
+    Type: Number
+    Default: 80
+  healthCheckPath:
+    Type: String
+    Default: /healthCheck
+  minContainers:
+    Type: Number
+    Default: 0
+  maxContainers:
+    Type: Number
+    Default: 3
+  autoScalingTargetValue:
+    Type: Number
+    Description: CPU average usage
+    Default: 40
+  deployService:
+    Type: String
+    Description: First time must be false
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  automaticDeploy:
+    Type: String
+    Description: Deploy service automatically on branch changes
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+Conditions:
+  doDeploy: !Equals 
+    - !Ref deployService
+    - 'true'
+  isPublicService: !Equals 
+    - !Ref publicService
+    - 'true'
+
+# Resources declares the AWS resources that you want to include in the stack
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resources-section-structure.html
+Resources:
+
+  # dbSecret:
+  #   Type: 'AWS::SecretsManager::Secret'
+  #   Properties:
+  #     Name: !Sub 'secm-${project}-${environment}-${serviceName}-db'
+  #     Description: !Sub 'Secret ${serviceName}-db'
+  #     SecretString: 
+  #       Fn::Sub:
+  #         - |
+  #           {
+  #             "DATABASE_URL": "postgresql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}?schema=users-api"
+  #           }
+  #         - DB_USER: !Sub '{{resolve:secretsmanager:secm-${project}-${environment}-database-credentials:SecretString:username}}'
+  #           DB_PASS: !Sub '{{resolve:secretsmanager:secm-${project}-${environment}-database-credentials:SecretString:password}}'
+  #           DB_HOST: !Sub '{{resolve:secretsmanager:secm-${project}-${environment}-database-credentials:SecretString:host}}'
+  #           DB_PORT: !Sub '{{resolve:secretsmanager:secm-${project}-${environment}-database-credentials:SecretString:port}}'
+  #           DB_NAME: !Sub '{{resolve:secretsmanager:secm-${project}-${environment}-database-credentials:SecretString:dbname}}'
+
+  FailNotification:
+    Type: 'AWS::CodeStarNotifications::NotificationRule'
+    Properties:
+      Name: !Sub '${serviceName}-fail-notifications'
+      Resource: !Sub "arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${project}-${environment}-${serviceName}-pipeline"
+      DetailType: FULL
+      EventTypeIds: 
+         - codepipeline-pipeline-pipeline-execution-failed
+      Status: ENABLED
+      Targets: 
+          - TargetType: AWSChatbotSlack 
+            TargetAddress: !Sub "arn:aws:chatbot::${AWS::AccountId}:chat-configuration/slack-channel/${project}-${environment}-fail-notifications" 
+
+  SucceedNotification:
+    Type: 'AWS::CodeStarNotifications::NotificationRule'
+    Properties:
+      Name: !Sub '${serviceName}-succeed-notifications'
+      Resource: !Sub "arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${project}-${environment}-${serviceName}-pipeline"
+      DetailType: FULL
+      EventTypeIds: 
+         - codepipeline-pipeline-pipeline-execution-started
+         - codepipeline-pipeline-pipeline-execution-succeeded
+      Status: ENABLED
+      Targets: 
+          - TargetType: AWSChatbotSlack 
+            TargetAddress: !Sub "arn:aws:chatbot::${AWS::AccountId}:chat-configuration/slack-channel/${project}-${environment}-succeed-notifications"
+  
+  taskRoles:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: modules/task-roles.yml
+      Parameters: 
+        project: !Ref project
+        environment: !Ref environment
+        service: !Ref serviceName
+
+  imageRepository:
+    Type: AWS::Serverless::Application
+    Properties: 
+      Location: modules/image-repository.yml
+      Parameters: 
+        project: !Ref project
+        environment: !Ref environment
+        service: !Ref serviceName
+  
+  loadBalancer:
+    Type: AWS::Serverless::Application
+    Properties: 
+      Location: modules/load-balancer.yml
+      Parameters: 
+        project: !Ref project
+        environment: !Ref environment
+        service: !Ref serviceName
+        vpcId:
+          Fn::ImportValue:
+            !Sub ${project}-${environment}-networking-vpcId
+        lbSubnetsIdList: 
+          Fn::ImportValue:
+            !If [isPublicService, !Sub "${project}-${environment}-networking-publicSubnetsIdList", !Sub "${project}-${environment}-networking-privateSubnetsIdList"]
+        publicLB: !Ref publicService
+        certificateARN:
+          Fn::ImportValue:
+            !Sub "${project}-${environment}-networking-certificateARN"
+        hostedZoneId:
+          Fn::ImportValue:
+            !Sub "${project}-${environment}-networking-hostedZoneId"
+        loadbalancerDomainName:
+          Fn::Sub:
+            - ${subDomain}.${domainName}
+            - subDomain: !Ref serviceName
+              domainName:
+                Fn::ImportValue:
+                  !Sub "${project}-${environment}-networking-hostedZoneName"
+
+  service:
+    Type: AWS::Serverless::Application
+    Condition: doDeploy
+    Properties: 
+      Location: modules/service.yml
+      Parameters: 
+        project: !Ref project
+        environment: !Ref environment
+        serviceName: !Ref serviceName
+        clusterName:
+          Fn::ImportValue:
+            !Sub '${project}-${environment}-cluster-clusterName'
+        vpcId: 
+          Fn::ImportValue:
+            !Sub ${project}-${environment}-networking-vpcId
+        loadBalancerSecurityGroupId: !GetAtt loadBalancer.Outputs.loadBalancerSecurityGroupId
+        loadBalancerListenerARN: !GetAtt loadBalancer.Outputs.loadBalancerListenerARN
+        serviceSubnetsIdList: 
+          Fn::ImportValue:
+            !Sub "${project}-${environment}-networking-privateSubnetsIdList"
+        namespaceId: 
+          Fn::ImportValue:
+            !Sub '${project}-${environment}-cluster-namespaceId'
+        containerCPU: !Select [0, !Split ["|", !Ref containerSize]]
+        containerRAM: !Select [1, !Split ["|", !Ref containerSize]]
+        imageVersion: !Ref imageVersion
+        containerPort: !Ref containerPort
+        healthCheckPath: !Ref healthCheckPath
+        minContainers: !Ref minContainers
+        maxContainers: !Ref maxContainers
+        autoScalingTargetValue: !Ref autoScalingTargetValue
+        autoScalingRoleARN: 
+          Fn::ImportValue:
+            !Sub '${project}-${environment}-cluster-autoScalingRoleARN'
+        executionRoleARN: !GetAtt taskRoles.Outputs.executionRoleARN
+        taskRoleARN: !GetAtt taskRoles.Outputs.taskRoleARN
+        internalSecurityGroupId:  
+          Fn::ImportValue:
+            !Sub '${project}-${environment}-cluster-containerInternalSecurityGroupId'
+  
+  pipeline:
+    Type: AWS::Serverless::Application
+    DependsOn: imageRepository
+    Properties: 
+      Location: modules/pipeline/main.yml
+      Parameters: 
+        project: !Ref project
+        environment: !Ref environment
+        service: !Ref serviceName
+        serviceRepository: !Ref serviceRepository
+        repositoryBranch: !Ref repositoryBranch
+        deployService: !Ref deployService
+        ecsClusterName: !Sub 'ecs-${project}-${environment}-cluster'
+        ecsServiceName: !Sub 'ecs-${project}-${environment}-${serviceName}-service'
+        artifactsBucketName:
+          Fn::ImportValue:
+            !Sub "${project}-bootstrap-pipelineBucketName"
+        gitConnectionArn: 
+          Fn::ImportValue:
+            !Sub "${project}-bootstrap-gitConnectionARN"
+        automaticDeploy: !Ref automaticDeploy

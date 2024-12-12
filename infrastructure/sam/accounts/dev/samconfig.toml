@@ -1,0 +1,27 @@
+version = 0.1
+[default.global.parameters]
+stack_name = "synchrox-service-backend-orcl-gen-dev"
+ 
+[default.deploy.parameters]
+s3_bucket = "synchrox-cfn-bucket-us-east-1"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
+s3_prefix = "sam/dev/backend-orcl-gen"
+parameter_overrides = [
+    "project=synchrox",
+    "environment=dev",
+    "serviceName=gen-orcl",
+    "serviceRepository=synchroxdev/backend_orcl_gen",
+    "repositoryBranch=master",
+    "imageVersion=latest",
+    "publicService=true",
+    "containerSize=256|0.5GB",
+    "containerPort=80",
+    "healthCheckPath=/healthCheck",
+    "minContainers=1",
+    "maxContainers=2",
+    "autoScalingTargetValue=80",
+    "deployService=true",
+    "automaticDeploy=true"
+]

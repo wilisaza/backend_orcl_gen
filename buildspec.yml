@@ -1,0 +1,33 @@
+version: 0.2
+phases:
+  install:
+    commands:
+      # Login on docker hub
+      - echo $DOCKER_HUB_TOKEN | docker login --username $DOCKER_HUB_USER --password-stdin
+  pre_build:
+    commands:
+      # Get Account ID
+      - |
+        data=(${CODEBUILD_BUILD_ARN//:/ })
+        ACCOUNT_ID=${data[4]}
+      # Create variables
+      - |
+        ECR_URI=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+        REPOSITORY_URI=$ECR_URI/ecr-$PROJECT-$ENVIRONMENT-$SERVICE
+        IMAGE_TAG=0.$CODEBUILD_BUILD_NUMBER
+      # Loging on docker with AWS ECR
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URI
+  build:
+    commands:
+      # Build docker image
+      - docker build
+        -t $REPOSITORY_URI:latest
+        -t $REPOSITORY_URI:$IMAGE_TAG .
+  post_build:
+    commands:
+      # Push docker image
+      - docker push $REPOSITORY_URI --all-tags
+      # Create image definitions file
+      - printf '[{"name":"%s","imageUri":"%s"}]' $SERVICE $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+artifacts:
+  files: imagedefinitions.json

@@ -1,0 +1,100 @@
+# This is the SAM template that represents the architecture of your serverless application
+# https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-template-basics.html
+
+# The AWSTemplateFormatVersion identifies the capabilities of the template
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/format-version-structure.html
+AWSTemplateFormatVersion: 2010-09-09
+Description: Deploy ecs service deployment pipeline
+
+# Transform section specifies one or more macros that AWS CloudFormation uses to process your template
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/transform-section-structure.html
+Transform:
+- AWS::Serverless-2016-10-31
+
+Parameters:
+  project:
+    Type: String
+    Description: Project's name
+    MinLength: "4"
+    MaxLength: "12"
+    AllowedPattern: ^(\d|\w)+$
+  environment:
+    Type: String
+    Description: Project's environment
+    Default: dev
+    AllowedValues:
+      - dev
+      - qa
+      - prod
+  service:
+    Type: String
+  serviceRepository:
+    Type: String
+  repositoryBranch:
+    Type: String
+    Default: main
+  deployService:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  ecsClusterName:
+    Type: String
+  ecsServiceName:
+    Type: String
+  artifactsBucketName:
+    Type: String
+  gitConnectionArn:
+    Type: String
+  automaticDeploy:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+Resources:
+  Permissions:
+    Type: AWS::Serverless::Application
+    Properties: 
+      Location: iam.yml
+      Parameters: 
+        project: !Ref project
+        environment: !Ref environment
+        service: !Ref service
+        artifactsBucketName: !Ref artifactsBucketName
+
+  BuildProject:
+    Type: AWS::Serverless::Application
+    Properties: 
+      Location: codebuild.yml
+      Parameters: 
+        project: !Ref project
+        environment: !Ref environment
+        service: !Ref service
+        codeBuildRoleArn: !GetAtt Permissions.Outputs.buildRoleArn
+        vpcId: 
+          Fn::ImportValue:
+            !Sub ${project}-${environment}-networking-vpcId
+        subnetsIdList: 
+          Fn::ImportValue:
+            !Sub "${project}-${environment}-networking-privateSubnetsIdList"
+        
+  PipelineProject:
+    Type: AWS::Serverless::Application
+    Properties: 
+      Location: codepipeline.yml
+      Parameters: 
+        project: !Ref project
+        environment: !Ref environment
+        service: !Ref service
+        artifactsBucketName: !Ref artifactsBucketName
+        repositoryName: !Ref serviceRepository
+        repositoryBranch: !Ref repositoryBranch
+        codePipelineRoleArn: !GetAtt Permissions.Outputs.pipelineRoleArn
+        gitConnectionArn: !Ref gitConnectionArn
+        buildProjectName: !GetAtt BuildProject.Outputs.codeBuildProjectName
+        ecsClusterName: !Ref ecsClusterName
+        ecsServiceName: !Ref ecsServiceName
+        deployService: !Ref deployService
+        automaticDeploy: !Ref automaticDeploy

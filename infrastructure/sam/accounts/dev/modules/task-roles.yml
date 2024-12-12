@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: 2010-09-09 
+Description: Create IAM Permissions for ECS TaskDefinitions.
+Parameters:
+  project:
+    Type: String
+  environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - qa
+      - prod
+  service:
+    Type: String
+Resources:
+  # A role for the containers
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'iam-${project}-${environment}-${service}-task-role'
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+      Policies:
+        - PolicyName: SES
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - ses:*
+              Resource:
+              - "*"
+      Tags:
+        - Key: Name
+          Value: !Sub 'iam-${project}-${environment}-${service}-task-role'
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'iam-${project}-${environment}-${service}-execution-role'
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+      Policies:
+        - PolicyName: secrets
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 'secretsmanager:GetSecretValue'
+                Effect: Allow
+                Resource:
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:secm-${project}-${environment}-global-*
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:secm-${project}-${environment}-${service}-*
+      Tags:
+        - Key: Name
+          Value: !Sub 'iam-${project}-${environment}-${service}-execution-role' 
+
+Outputs:
+  taskRoleName:
+    Description: Task Role Name
+    Value: !Ref TaskRole
+  taskRoleARN:
+    Description: Task Role ARN
+    Value: !GetAtt TaskRole.Arn
+  executionRoleName:
+    Description: Execution Role Name
+    Value: !Ref ExecutionRole
+  executionRoleARN:
+    Description: Execution Role ARN
+    Value: !GetAtt ExecutionRole.Arn
+    

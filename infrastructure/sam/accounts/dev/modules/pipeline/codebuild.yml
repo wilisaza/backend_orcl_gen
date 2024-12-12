@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Codebuild Project
+
+Parameters:
+  project:
+    Type: String
+  environment:
+    Type: String
+    Description: Project's environment
+    Default: dev
+    AllowedValues:
+      - dev
+      - qa
+      - prod
+  service:
+    Type: String
+  codeBuildRoleArn:
+    Type: String
+  vpcId:
+    Type: String
+  subnetsIdList:
+    Type: CommaDelimitedList
+Resources:
+  CodeBuildSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub 'secg-${project}-${environment}-${service}-build'
+      GroupDescription: !Sub 'SG for build ${project}-${environment}-${service}'
+      VpcId: !Ref vpcId
+      Tags:
+        - Key: Name
+          Value: !Sub 'secg-${project}-${environment}-${service}-build'
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties: 
+      Name: !Sub ${project}-${environment}-${service}-build
+      Description: Build project
+      Artifacts: 
+        Type: CODEPIPELINE
+      BadgeEnabled: False
+      Environment: 
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariables:
+          - Name: PROJECT
+            Type: PLAINTEXT
+            Value: !Ref project
+          - Name: ENVIRONMENT
+            Type: PLAINTEXT
+            Value: !Ref environment
+          - Name: SERVICE
+            Type: PLAINTEXT
+            Value: !Ref service
+          - Name: CORS_ORIGINS
+            Type: PLAINTEXT
+            Value: '"*"'
+          - Name: DOCKER_HUB_USER
+            Type: SECRETS_MANAGER
+            Value: !Sub secm-${project}-dockerhub-credentials:DOCKER_HUB_USER
+          - Name: DOCKER_HUB_TOKEN
+            Type: SECRETS_MANAGER
+            Value: !Sub secm-${project}-dockerhub-credentials:DOCKER_HUB_TOKEN
+          - Name: JWT_SECRET
+            Type: SECRETS_MANAGER
+            Value: !Sub secm-${project}-${environment}-global:JWT_SECRET
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
+        ImagePullCredentialsType: CODEBUILD
+        PrivilegedMode: True
+        Type: LINUX_CONTAINER
+      QueuedTimeoutInMinutes: 60
+      ServiceRole: !Ref codeBuildRoleArn
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec.yml
+      TimeoutInMinutes: 60
+      Visibility: PRIVATE
+      VpcConfig:
+        SecurityGroupIds: 
+          - !Ref CodeBuildSecurityGroup
+        Subnets: !Ref subnetsIdList
+        VpcId: !Ref vpcId
+
+Outputs:
+  codeBuildProjectName:
+    Value: !Ref CodeBuildProject
+  codeBuildProjectArn:
+    Value: !GetAtt CodeBuildProject.Arn

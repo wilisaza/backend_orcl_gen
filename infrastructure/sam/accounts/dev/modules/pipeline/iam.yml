@@ -1,0 +1,177 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: IAM Resources
+Parameters:
+  project:
+    Type: String
+  environment:
+    Type: String
+    Description: Project's environment
+    Default: dev
+    AllowedValues:
+      - dev
+      - qa
+      - prod
+  service:
+    Type: String
+    Default: '*'
+  artifactsBucketName:
+    Type: String
+Resources:
+  BuildRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub 'iam-${project}-${environment}-${service}-build-role'
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+        Version: 2012-10-17
+      Path: /
+      Policies:
+        - PolicyName: logsAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Effect: Allow
+                Resource: '*'
+        - PolicyName: secrets
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 'secretsmanager:GetSecretValue'
+                Effect: Allow
+                Resource:
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:secm-${project}-dockerhub-credentials*
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:secm-${project}-${environment}-global*
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:secm-${project}-${environment}-${service}*
+        - PolicyName: ecrAuth
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 'ecr:GetAuthorizationToken'
+                Effect: Allow
+                Resource: '*'
+        - PolicyName: ecrPush
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 'ecr:*'
+                Effect: Allow
+                Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/ecr-${project}-${environment}-${service}
+        - PolicyName: VPCPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+            - Effect: Allow
+              Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeDhcpOptions
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DeleteNetworkInterface
+                - ec2:DescribeSubnets
+                - ec2:DescribeSecurityGroups
+                - ec2:DescribeVpcs
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - ec2:CreateNetworkInterfacePermission
+              Resource: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+              Condition:
+                StringEquals:
+                  ec2:AuthorizedService: codebuild.amazonaws.com
+
+  PipelineRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub 'iam-${project}-${environment}-${service}-pipeline-role'
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+        Version: 2012-10-17
+      Path: /
+      Policies:
+        - PolicyName: codeBuildPermissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 'codebuild:BatchGetBuilds'
+                  - 'codebuild:StartBuild'
+                  - 'codebuild:BatchGetBuildBatches'
+                  - 'codebuild:StartBuildBatch'
+                Effect: Allow
+                Resource: '*'
+        - PolicyName: ecrAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 'ecr:DescribeImages'
+                Effect: Allow
+                Resource: '*'
+        - PolicyName: ecsDeploy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 'ecs:*'
+                Effect: Allow
+                Resource: '*'
+              - Action:
+                  - 'iam:PassRole'
+                Effect: Allow
+                Resource: 
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/iam-${project}-${environment}-${service}-task-role
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/iam-${project}-${environment}-${service}-execution-role
+              
+
+  CommonPolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${project}-${environment}-common-policies
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - s3:Put*
+              - s3:Get*
+              - s3:List*
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${artifactsBucketName}'
+              - !Sub 'arn:aws:s3:::${artifactsBucketName}/*'
+          - Action:
+              - 'codestar-connections:UseConnection'
+            Effect: Allow
+            Resource: '*'
+      Roles: 
+        - !Ref BuildRole
+        - !Ref PipelineRole
+
+Outputs:
+  buildRoleArn:
+    Value: !GetAtt 
+      - BuildRole
+      - Arn
+  pipelineRoleArn:
+    Value: !GetAtt 
+      - PipelineRole
+      - Arn
+  
+  

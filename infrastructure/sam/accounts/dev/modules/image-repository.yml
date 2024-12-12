@@ -1,0 +1,33 @@
+Parameters:
+  project:
+    Type: String
+  environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - qa
+      - prod
+  service:
+    Type: String
+Resources:
+  ImageRepository:
+    Type: AWS::ECR::Repository
+    Properties: 
+      EncryptionConfiguration: 
+        EncryptionType: KMS
+      ImageScanningConfiguration: 
+        ScanOnPush: True
+      ImageTagMutability: MUTABLE
+      RepositoryName: !Sub 'ecr-${project}-${environment}-${service}'
+
+Outputs:
+  imageRepositoryName:
+    Description: Image Repository Name
+    Value: !Ref ImageRepository
+  imageRepositoryURI:
+    Description: Image Repository URI
+    Value: !GetAtt ImageRepository.RepositoryUri
+  imageRepositoryARN:
+    Description: Image Repository ARN
+    Value: !GetAtt ImageRepository.Arn
