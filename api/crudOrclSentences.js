@@ -249,7 +249,13 @@ export const sentences = {
         bindVars[colum] = { dir : OracleDB.BIND_OUT, type: OracleDB.NUMBER }
       }
       else{
+        /*if(typeof params[colum] === 'string' && (parseInt(params[colum].substring(0,2),10) <= 21) && (parseInt(params[colum].substring(0,4),10) > 1970) && (parseInt(params[colum].substring(4,6),10) <= 12) && (parseInt(params[colum].substring(6,8),10) <= 31)){
+          bindVars[colum] = { dir : OracleDB.BIND_IN, val: `${new Date(params[colum])}`, type: OracleDB.DB_TYPE_DATE }
+          console.log(bindVars[colum])
+        }
+        else{*/
         bindVars[colum] = `${params[colum]}`
+        //}
       }
     }
     return bindVars

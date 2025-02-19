@@ -21,21 +21,25 @@ export const functions = {
   },
 
   keysToLowerCase(obj) {
-    var keys = Object.keys(obj)
-    var n = keys.length
-    var i = 0
+    const keys = Object.keys(obj)
+    const n = keys.length
+    let i = 0
+    let key = ''
     while (i < n) {
-      var key = keys[i] // "cache" it, for less lookups to the array
+      key = keys[i] // "cache" it, for less lookups to the array
       obj[key.toLowerCase()] = obj[key] // swap the value to a new lower case key
       delete obj[key] // delete the old key
+      if (Array.isArray(obj[key.toLowerCase()]) ) {
+        obj[key.toLowerCase()] = this.arrayKeysToLowerCase(obj[key.toLowerCase()])
+      }
       i++
     }
     return (obj)
   },
 
   arrayKeysToLowerCase(obj) {
-    var n = obj.length
-    var i = 0
+    const n = obj.length
+    let i = 0
     while (i < n) {
       obj[i] = this.keysToLowerCase(obj[i])
       i++
